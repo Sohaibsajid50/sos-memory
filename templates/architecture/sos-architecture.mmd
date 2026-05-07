@@ -1,0 +1,10 @@
+flowchart LR
+  Agent["Claude / Codex / Gemini"] --> Registry["projects.json"]
+  Agent --> Vault["Obsidian Vault"]
+  Agent --> QMD["QMD Index"]
+  Continues["continues handoff"] --> Agent
+  Vault --> Daily["Daily Notes"]
+  Vault --> Projects["Project Pages"]
+  Vault --> Decisions["Decision Records"]
+  Registry --> Projects
+  QMD --> Vault

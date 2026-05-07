@@ -1,0 +1,5 @@
+{
+  "vault": {
+    "path": "{{VAULT_ROOT}}"
+  }
+}

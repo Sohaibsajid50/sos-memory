@@ -1,0 +1,16 @@
+version: 1
+handoff:
+  output: .continues-handoff.md
+  preset: full
+agents:
+  claude:
+    command: continues claude 1
+  codex:
+    command: continues codex 1
+  gemini:
+    command: continues gemini 1
+  antigravity:
+    command: continues antigravity 1
+notes:
+  canonical_memory: vault_registry_qmd
+  handoff_is_bridge_context: true

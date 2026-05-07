@@ -1,0 +1,24 @@
+{
+  "name": "sos-memory",
+  "version": "0.1.0",
+  "description": "Portable durable memory toolkit for Claude, Codex, Gemini, QMD, and continues.",
+  "type": "commonjs",
+  "bin": {
+    "sos": "./bin/sos.js"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "validate": "npm test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "memory",
+    "claude",
+    "codex",
+    "qmd",
+    "continues"
+  ],
+  "license": "MIT"
+}
