@@ -1,0 +1,36 @@
+{
+  "name": "sos-memory",
+  "version": "0.1.0",
+  "description": "Durable cross-agent memory toolkit for Claude, Codex, Gemini, QMD, vault project pages, daily notes, decisions, and continues handoffs.",
+  "author": {
+    "name": "Sohaib Sajid"
+  },
+  "license": "MIT",
+  "keywords": [
+    "memory",
+    "qmd",
+    "obsidian",
+    "claude",
+    "codex",
+    "gemini"
+  ],
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json",
+  "interface": {
+    "displayName": "SOS Memory",
+    "shortDescription": "Durable project memory and QMD health checks.",
+    "longDescription": "A portable memory toolkit for registry-backed project context, vault pages, daily notes, decisions, QMD collections, embeddings, and cross-agent session handoffs.",
+    "developerName": "Sohaib Sajid",
+    "category": "Productivity",
+    "capabilities": [
+      "Write",
+      "Automation"
+    ],
+    "defaultPrompt": [
+      "Resume this project from SOS memory.",
+      "Run SOS health check and repair drift.",
+      "Bootstrap memory for this project."
+    ],
+    "brandColor": "#2563EB"
+  }
+}

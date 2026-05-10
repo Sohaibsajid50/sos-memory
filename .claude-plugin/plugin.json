@@ -1,0 +1,9 @@
+{
+  "name": "sos-memory",
+  "displayName": "SOS Memory",
+  "description": "Durable cross-agent memory toolkit for Claude, Codex, Gemini, QMD, vault project pages, daily notes, decisions, and continues handoffs.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Sohaib Sajid"
+  }
+}
