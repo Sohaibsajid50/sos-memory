@@ -22,12 +22,16 @@ async function validate(options = {}) {
   const repoRoot = options.repoRoot || path.resolve(__dirname, '..');
   const registryPath = options.registryPath || getRegistryPath(env);
   const issues = [];
+  const notes = [];
 
   if (await exists(registryPath)) {
     const registry = await readJson(registryPath);
     assertSupportedRegistry(registry);
+    notes.push(`[ok] Registry: ${registryPath}`);
+    notes.push(`[ok] Registered projects: ${registry.projects.length}`);
     for (const key of ['documents_root', 'vault_root', 'pending_root']) {
-      if (!(await exists(registry[key]))) issues.push(`[warn] Missing ${key}: ${registry[key]}`);
+      if (await exists(registry[key])) notes.push(`[ok] ${key}: ${registry[key]}`);
+      else issues.push(`[warn] Missing ${key}: ${registry[key]}`);
     }
   } else {
     issues.push(`[warn] Missing registry: ${registryPath}`);
@@ -38,6 +42,8 @@ async function validate(options = {}) {
   const installedVersion = (await exists(installedPath))
     ? (await fs.readFile(installedPath, 'utf8')).trim()
     : null;
+  notes.push(`[ok] Toolkit version: ${packageJson.version}`);
+  if (installedVersion) notes.push(`[ok] Installed version: ${installedVersion}`);
 
   if (installedVersion && installedVersion !== packageJson.version) {
     issues.push('[warn] SOS toolkit is behind. Run: sos update');
@@ -49,11 +55,14 @@ async function validate(options = {}) {
   }
 
   const qmd = detectQmd(env);
-  if (!qmd.found) issues.push(qmd.guidance);
+  if (qmd.found) notes.push(`[ok] QMD: ${qmd.path}`);
+  else issues.push(qmd.guidance);
 
   const continues = detectContinues();
-  if (!continues.found) issues.push(continues.guidance);
+  if (continues.found) notes.push(`[ok] Continues: ${continues.version}`);
+  else notes.push(continues.guidance);
 
+  for (const note of notes) console.log(note);
   for (const issue of issues) console.log(issue);
   if (!issues.length) console.log('SOS memory validation passed.');
   return { issues, qmd, continues, installedVersion };

@@ -27,13 +27,28 @@ test('numbered folder scanner excludes 00-* folders', async () => {
   assert.deepEqual(folders.map((folder) => path.basename(folder)).sort(), ['01-Client', '06-Workspace']);
 });
 
-test('QMD detection returns guidance when unavailable from configured PATH', () => {
+test('QMD detection checks npm-global fallback before guidance', async () => {
   const originalPath = process.env.PATH;
-  process.env.PATH = '/definitely/missing';
-  const result = detectQmd();
-  process.env.PATH = originalPath;
+  const originalHome = process.env.HOME;
+  const dir = await tempDir();
 
-  if (!result.found) {
-    assert.equal(result.guidance, 'Install QMD: npm install -g @tobilu/qmd');
+  process.env.PATH = '/definitely/missing';
+  process.env.HOME = dir;
+
+  await fs.mkdir(path.join(dir, '.npm-global/bin'), { recursive: true });
+  await fs.writeFile(path.join(dir, '.npm-global/bin/qmd'), '');
+
+  const found = detectQmd();
+  assert.equal(found.found, true);
+  assert.equal(found.path, path.join(dir, '.npm-global/bin/qmd'));
+
+  await fs.rm(path.join(dir, '.npm-global/bin/qmd'));
+  const missing = detectQmd();
+
+  process.env.PATH = originalPath;
+  process.env.HOME = originalHome;
+
+  if (!missing.found) {
+    assert.equal(missing.guidance, 'Install QMD: npm install -g @tobilu/qmd');
   }
 });

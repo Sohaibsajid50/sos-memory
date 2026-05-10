@@ -44,7 +44,8 @@ async function main(args) {
       return healthCheck({ repair: flags.has('--repair') });
     case 'bootstrap-project':
       if (!positional[0]) throw new Error('Usage: sos bootstrap-project <folder>');
-      return bootstrapProject(positional[0]);
+      await bootstrapProject(positional[0]);
+      return healthCheck({ repair: true });
     case 'update-qmd':
       return runQmd(['update']);
     case 'embed':

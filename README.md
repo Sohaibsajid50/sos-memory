@@ -37,6 +37,8 @@ node bin/sos.js audit-vault
 node bin/sos.js continues
 ```
 
+`bootstrap-project` also runs a repair health check, updates QMD, and embeds pending documents so the new project has retrieval vectors immediately.
+
 Claude plugin slash commands:
 
 ```text
@@ -57,6 +59,8 @@ Canonical memory lives in:
 - QMD: local search index over vault and project collections
 
 Bridge context lives in `.continues-handoff.md` and should be promoted into canonical memory when valuable.
+
+Agents should query QMD before asking for old context when previous decisions, research, project history, implementation details, or session context may be relevant. Use `qmd query` for semantic/vector retrieval and `qmd search` for exact identifiers or keywords.
 
 ## Health Check
 

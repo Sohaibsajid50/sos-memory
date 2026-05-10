@@ -13,6 +13,7 @@ function detectQmd(env = process.env) {
   if (fromPath) return { found: true, path: fromPath };
 
   const candidates = [
+    path.join(os.homedir(), '.npm-global/bin/qmd'),
     path.join(os.homedir(), '.local/bin/qmd'),
     '/usr/local/bin/qmd'
   ];
@@ -29,7 +30,7 @@ function detectContinues() {
     return { found: true, version: result.stdout.trim() || result.stderr.trim() };
   }
 
-  return { found: false, guidance: 'npx continues --help' };
+  return { found: false, guidance: '[info] Continues CLI not found. Optional bridge available with: npx continues --help' };
 }
 
 module.exports = {

@@ -43,6 +43,7 @@ test('install creates registry, vault folders, installed version, and templates'
   assert.equal(await exists(path.join(env.SOS_VAULT_ROOT, 'Daily')), true);
   assert.equal(await exists(path.join(env.SOS_MEMORY_HOME, 'installed-version')), true);
   assert.equal(await exists(path.join(env.SOS_MEMORY_HOME, 'hooks', '_common.js')), true);
+  assert.equal(await exists(path.join(env.SOS_MEMORY_HOME, 'adapters', 'CLAUDE.md')), true);
   assert.equal(await exists(path.join(env.SOS_MEMORY_HOME, 'templates', '.continues.yml')), true);
 });
 

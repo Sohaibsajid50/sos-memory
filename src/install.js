@@ -18,6 +18,7 @@ const INSTALL_FILES = [
   ['skills/sos-memory/SKILL.md', 'skills/sos-memory/SKILL.md'],
   ['skills/sos-bootstrap/SKILL.md', 'skills/sos-bootstrap/SKILL.md'],
   ['skills/sos-vault-maintenance/SKILL.md', 'skills/sos-vault-maintenance/SKILL.md'],
+  ['templates/adapters/CLAUDE.md', 'adapters/CLAUDE.md'],
   ['templates/adapters/AGENTS.md', 'adapters/AGENTS.md'],
   ['templates/adapters/GEMINI.md', 'adapters/GEMINI.md'],
   ['templates/continues/.continues.yml', 'templates/.continues.yml'],
