@@ -140,10 +140,13 @@ node bin/sos.js doctor            # verify everything, including the sneaky fail
 (`~/.sos/sos.config.json`) describes your setup; re-running regenerates jobs,
 GBrain config, and MCP registrations to match. Edit the file, `apply` again.
 
-> **Agent-native onboarding (in progress):** the goal is that you clone this
-> repo, open your agent inside it, and say *"set me up"* — the agent interviews
-> you (what you do, which projects, which models fit your RAM), writes the
-> config, runs `apply`, and verifies with `doctor`. See [Roadmap](#roadmap).
+> **Agent-native onboarding:** clone this repo, open your agent inside it, and
+> say *"set me up"* (or run `/sos-memory:sos-setup`). The agent interviews you
+> — what you do, which projects, which models fit your RAM — writes the config,
+> builds your folders and vault, provisions the stack, and verifies with
+> `doctor`. Choice questions use native UI (AskUserQuestion) in Claude Code,
+> plain prompts elsewhere. ~4 interactions, walls of text welcome, "skip"
+> always works.
 
 ### Use as a Claude Code / Codex plugin
 
@@ -154,6 +157,7 @@ claude --plugin-dir /path/to/sos-memory
 ```
 
 ```text
+/sos-memory:sos-setup       ← guided onboarding: interview → install → verify
 /sos-memory:sos-health      /sos-memory:sos-install     /sos-memory:sos-validate
 /sos-memory:sos-bootstrap-project <folder>
 /sos-memory:sos-update-qmd  /sos-memory:sos-embed
@@ -231,8 +235,9 @@ ship today; native Windows job installation is on the roadmap. Everything else
 
 - [x] **M1** — portable hooks, cross-platform scheduler, GBrain layer,
   config-driven `apply`, incident-encoding `doctor`
-- [ ] **M2** — agent-native onboarding: clone → *"set me up"* → guided
-  interview → running system in one conversation
+- [x] **M2** — agent-native onboarding: clone → *"set me up"* → guided
+  interview → running system in one conversation (`skills/sos-setup`; fresh-
+  machine validation ongoing)
 - [ ] **M3** — VPS profile: docker-compose (Postgres, Ollama, GBrain HTTP),
   team/client deployments
 - [ ] **M4** — plugin marketplace distribution, demo, public beta

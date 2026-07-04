@@ -18,6 +18,7 @@ const INSTALL_FILES = [
   ['hooks/gbrain-sync.js', 'hooks/gbrain-sync.js'],
   ['hooks/transcript-distiller.js', 'hooks/transcript-distiller.js'],
   ['skills/sos-memory/SKILL.md', 'skills/sos-memory/SKILL.md'],
+  ['skills/sos-setup/SKILL.md', 'skills/sos-setup/SKILL.md'],
   ['skills/sos-bootstrap/SKILL.md', 'skills/sos-bootstrap/SKILL.md'],
   ['skills/sos-vault-maintenance/SKILL.md', 'skills/sos-vault-maintenance/SKILL.md'],
   ['templates/adapters/CLAUDE.md', 'adapters/CLAUDE.md'],
