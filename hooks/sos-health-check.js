@@ -9,7 +9,8 @@ const MIN_INTERVAL_MS = 5 * 60 * 1000;
 
 function readHookInput() {
   try {
-    return JSON.parse(fs.readFileSync('/dev/stdin', 'utf8'));
+    // fd 0 works on macOS/Linux/Windows, unlike /dev/stdin.
+    return JSON.parse(fs.readFileSync(0, 'utf8'));
   } catch (_) {
     return {};
   }
