@@ -15,6 +15,8 @@ const INSTALL_FILES = [
   ['hooks/qmd-refresh.js', 'hooks/qmd-refresh.js'],
   ['hooks/sos-health-check.js', 'hooks/sos-health-check.js'],
   ['hooks/action-log.js', 'hooks/action-log.js'],
+  ['hooks/gbrain-sync.js', 'hooks/gbrain-sync.js'],
+  ['hooks/transcript-distiller.js', 'hooks/transcript-distiller.js'],
   ['skills/sos-memory/SKILL.md', 'skills/sos-memory/SKILL.md'],
   ['skills/sos-bootstrap/SKILL.md', 'skills/sos-bootstrap/SKILL.md'],
   ['skills/sos-vault-maintenance/SKILL.md', 'skills/sos-vault-maintenance/SKILL.md'],

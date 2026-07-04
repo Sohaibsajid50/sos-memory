@@ -1,5 +1,8 @@
+const { apply } = require('./apply');
 const { auditVault, inspectContinues } = require('./audit');
 const { bootstrapProject } = require('./bootstrap');
+const { doctor } = require('./doctor');
+const { detectPlatform } = require('./platform');
 const { healthCheck } = require('./health-check');
 const { install } = require('./install');
 const { runQmd } = require('./qmd');
@@ -16,6 +19,9 @@ function parseFlags(args) {
 function printHelp() {
   console.log(`sos-memory commands:
   sos install [--dry-run] [--auto] [--yes]
+  sos apply [--dry-run]
+  sos doctor
+  sos platform
   sos update
   sos validate
   sos health-check [--repair]
@@ -36,6 +42,13 @@ async function main(args) {
         dryRun: flags.has('--dry-run'),
         yes: flags.has('--yes')
       });
+    case 'apply':
+      return apply({ dryRun: flags.has('--dry-run') });
+    case 'doctor':
+      return doctor();
+    case 'platform':
+      console.log(JSON.stringify(detectPlatform(), null, 2));
+      return null;
     case 'update':
       return update();
     case 'validate':
