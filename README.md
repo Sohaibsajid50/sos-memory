@@ -28,6 +28,9 @@ Codex-compatible hosts should use the `.codex-plugin/plugin.json` manifest and t
 npm test
 node bin/sos.js install --dry-run
 node bin/sos.js install --auto
+node bin/sos.js platform            # detect OS, scheduler, RAM, model suggestions
+node bin/sos.js apply [--dry-run]   # materialize ~/.sos/sos.config.json: jobs, gbrain, MCP
+node bin/sos.js doctor              # verify the whole system, incl. known failure modes
 node bin/sos.js validate
 node bin/sos.js health-check --repair
 node bin/sos.js bootstrap-project /absolute/project/path
@@ -38,6 +41,20 @@ node bin/sos.js continues
 ```
 
 `bootstrap-project` also runs a repair health check, updates QMD, and embeds pending documents so the new project has retrieval vectors immediately.
+
+## GBrain layer (optional, recommended)
+
+Beyond QMD keyword/vector retrieval, SOS can run a local
+[GBrain](https://github.com/garrytan/gbrain) brain for synthesis, graph, and
+trajectory questions — fully local (Postgres + pgvector, Ollama models), fed by
+an hourly registry-driven sync and a nightly enrichment cycle, plus a transcript
+distiller that captures every Claude Code / Codex session into the vault.
+`sos apply` provisions and wires all of it from one config file
+(`~/.sos/sos.config.json`); `sos doctor` verifies it, including every known
+failure mode. Design notes and traps: `references/gbrain-setup.md`.
+
+Scheduling is cross-platform: launchd (macOS), systemd user timers (Linux),
+cron (fallback); Windows Task Scheduler commands are emitted as guidance.
 
 Claude plugin slash commands:
 
