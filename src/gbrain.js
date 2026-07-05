@@ -57,7 +57,9 @@ function setModelConfig(gbrainBin, { thinkModel, cycleModel }) {
   };
   if (thinkModel) set('models.think', `openrouter:${thinkModel}`);
   if (cycleModel) set('models.default', `openrouter:${cycleModel}`);
-  set('cycle.propose_takes.enabled', 'false');
+  // Note: cycle phases like propose_takes have NO enable gate and their USD
+  // budget caps never trigger on local models (unpriced = always allowed).
+  // Containment is the job window + watchdog in jobSpecs, not config.
   return results;
 }
 
@@ -90,11 +92,83 @@ function jobSpecs({ nodeBin, gbrainBin, ollamaBin, hooksDir, cycleModel, thinkMo
       env,
       schedule: { hour: 3, minute: 30 },
       timeoutSeconds: DREAM_TIMEOUT_SECONDS,
+      // launchd/systemd fire missed calendar jobs on laptop wake — without
+      // this window a 3:30am dream runs at 4pm and loads models mid-workday.
+      window: {
+        startHour: 2,
+        endHour: 7,
+        catchUpBeforeHour: 9,
+        staleMinutes: 72 * 60,
+        successFile: path.join(GBRAIN_HOME, 'logs', 'dream-last-success')
+      },
       onExit: [cycleModel && ollamaBin ? `${ollamaBin} stop ${cycleModel}` : null,
         thinkModel && ollamaBin ? `${ollamaBin} stop ${thinkModel}` : null].filter(Boolean)
     });
   }
   return jobs;
+}
+
+const OLLAMA_CONTEXT_CAP = '32768';
+const SOS_OLLAMA_PLIST = path.join(
+  os.homedir(), 'Library', 'LaunchAgents', 'com.sos.ollama.plist'
+);
+
+/**
+ * Cap Ollama's context window at the server level. Without a cap, a chat
+ * request can load a model at its maximum context (qwen3:4b = 262k tokens),
+ * ballooning a 3GB model to ~24GB of KV cache. 32k is plenty for synthesis.
+ *
+ * brew-managed service plists cannot hold custom env — `brew services
+ * restart` regenerates the plist and wipes edits (observed live). So on
+ * macOS SOS owns the ollama service: stop brew's, install com.sos.ollama
+ * with the env baked in. Linux/other: systemd drop-in guidance.
+ */
+function ensureOllamaContextCap({ ollamaBin, dryRun = false } = {}) {
+  if (process.platform !== 'darwin') {
+    return {
+      applied: false,
+      guidance: `Set OLLAMA_CONTEXT_LENGTH=${OLLAMA_CONTEXT_CAP} on the ollama server (systemd: systemctl edit ollama → [Service] Environment=OLLAMA_CONTEXT_LENGTH=${OLLAMA_CONTEXT_CAP})`
+    };
+  }
+  const serveBin = ollamaBin || '/opt/homebrew/bin/ollama';
+  if (fs.existsSync(SOS_OLLAMA_PLIST)) return { applied: true, alreadySet: true };
+  if (dryRun) return { applied: false, wouldSet: OLLAMA_CONTEXT_CAP };
+
+  const plist = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.sos.ollama</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>${serveBin}</string>
+    <string>serve</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>OLLAMA_CONTEXT_LENGTH</key>
+    <string>${OLLAMA_CONTEXT_CAP}</string>
+    <key>OLLAMA_FLASH_ATTENTION</key>
+    <string>1</string>
+    <key>OLLAMA_KV_CACHE_TYPE</key>
+    <string>q8_0</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+</dict>
+</plist>
+`;
+  spawnSync('brew', ['services', 'stop', 'ollama'], { encoding: 'utf8', timeout: 60000 });
+  fs.writeFileSync(SOS_OLLAMA_PLIST, plist);
+  const uid = process.getuid();
+  spawnSync('launchctl', ['bootout', `gui/${uid}`, SOS_OLLAMA_PLIST], { encoding: 'utf8' });
+  const boot = spawnSync('launchctl', ['bootstrap', `gui/${uid}`, SOS_OLLAMA_PLIST], { encoding: 'utf8' });
+  return boot.status === 0
+    ? { applied: true, installed: true }
+    : { applied: false, error: boot.stderr.trim() };
 }
 
 /** Shell commands to register the gbrain MCP server with each agent CLI. */
@@ -147,6 +221,20 @@ function doctorChecks({ gbrain, ollama, postgres, requiredModels = [] }) {
     detail: ollama.found ? (ollama.running ? 'daemon responding' : 'installed but daemon not responding') : ollama.guidance
   });
 
+  if (process.platform === 'darwin') {
+    const capCheck = spawnSync('plutil', [
+      '-extract', 'EnvironmentVariables.OLLAMA_CONTEXT_LENGTH', 'raw', SOS_OLLAMA_PLIST
+    ], { encoding: 'utf8' });
+    const capSet = capCheck.status === 0 && Number(capCheck.stdout.trim()) > 0;
+    checks.push({
+      id: 'ollama_context_cap',
+      ok: capSet,
+      detail: capSet
+        ? `OLLAMA_CONTEXT_LENGTH=${capCheck.stdout.trim()} (com.sos.ollama service)`
+        : 'no SOS-owned ollama service with a context cap — one request can balloon a small model to 20GB+ of KV cache; run sos apply'
+    });
+  }
+
   for (const model of requiredModels) {
     checks.push({
       id: `ollama_model_${model.replace(/[^a-z0-9]+/gi, '_')}`,
@@ -190,9 +278,11 @@ module.exports = {
   DREAM_TIMEOUT_SECONDS,
   DUMMY_OPENROUTER_KEY,
   GBRAIN_CONFIG_PATH,
+  OLLAMA_CONTEXT_CAP,
   OLLAMA_OPENAI_URL,
   doctorChecks,
   ensureFilePlaneConfig,
+  ensureOllamaContextCap,
   findStaleServeProcesses,
   jobSpecs,
   mcpRegistrationCommands,

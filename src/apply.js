@@ -56,6 +56,21 @@ async function apply({ dryRun = false } = {}) {
 
   log(`[apply] platform=${platformInfo.os}/${platformInfo.arch} ram=${platformInfo.totalRamGb}GB scheduler=${platformInfo.scheduler} profile=${config.profile}`);
 
+  // Ensure the SOS-owned ollama service (with the context cap) BEFORE the
+  // provisioning gate: a stopped daemon hides installed models, which would
+  // otherwise wedge apply on "missing" components that only need a start.
+  if (config.retrieval.gbrain && !dryRun) {
+    const ollamaBin = findInCandidates('ollama');
+    if (ollamaBin) {
+      const capResult = gbrainIntegration.ensureOllamaContextCap({ ollamaBin });
+      log(`[apply] ollama service/context cap: ${capResult.alreadySet ? 'already set' : capResult.installed ? 'installed' : capResult.guidance || capResult.error || 'pending'}`);
+      if (capResult.installed) {
+        // Give the daemon a moment before probing models.
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 4000);
+      }
+    }
+  }
+
   const plan = provisioningPlan(config, platformInfo);
   const missing = plan.steps.filter((step) => step.needed);
   log(formatPlan(plan));
@@ -77,8 +92,10 @@ async function apply({ dryRun = false } = {}) {
       log('[apply] gbrain file-plane config + model split written');
     }
 
+    // Prefer the stable PATH symlink over process.execPath: the latter is a
+    // versioned Cellar path on Homebrew installs and breaks on node upgrades.
     const jobs = gbrainIntegration.jobSpecs({
-      nodeBin: process.execPath,
+      nodeBin: findInCandidates('node') || process.execPath,
       gbrainBin,
       ollamaBin: plan.detections.ollama.path,
       hooksDir: REPO_HOOKS_DIR,

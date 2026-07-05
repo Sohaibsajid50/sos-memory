@@ -21,19 +21,43 @@ const CRON_MARKER = '# sos-memory managed';
  * @property {{intervalSeconds:number}|{hour:number,minute:number}|{minute:number}} schedule
  * @property {number} [timeoutSeconds]  hard watchdog cap (wrapped in shell on unix)
  * @property {string[]} [onExit]    extra shell commands after the job ends (unix only)
+ * @property {{startHour:number,endHour:number,catchUpBeforeHour:number,staleMinutes:number,successFile:string}} [window]
+ *   Only run inside [startHour, endHour); outside it, run only if successFile
+ *   is older than staleMinutes AND current hour < catchUpBeforeHour. Guards
+ *   heavy nightly jobs against wake-firing: launchd/systemd run missed
+ *   calendar jobs when a laptop wakes, which otherwise loads large models
+ *   mid-workday.
  */
 
-/** Wrap a command in a watchdog shell line enforcing timeoutSeconds + onExit cleanup. */
+/** Shell prefix that enforces a job's run window (exit 0 = skipped). */
+function windowGuardPrefix(job) {
+  if (!job.window) return '';
+  const { startHour, endHour, catchUpBeforeHour, staleMinutes, successFile } = job.window;
+  return (
+    `H=$(date +%H); S="${successFile}"; ` +
+    `RECENT=$(find "$S" -mmin -${staleMinutes} 2>/dev/null); ` +
+    `if [ "$H" -ge ${startHour} ] && [ "$H" -lt ${endHour} ]; then :; ` +
+    `elif [ -z "$RECENT" ] && [ "$H" -lt ${catchUpBeforeHour} ]; then echo "[window] ${job.id} catch-up run"; ` +
+    `else echo "[window] ${job.id} skipped: outside ${startHour}-${endHour} window"; exit 0; fi; `
+  );
+}
+
+/** Wrap a command in window-guard + watchdog shell enforcing timeoutSeconds + onExit cleanup. */
 function watchdogShellLine(job) {
   const quoted = job.command.map((part) => `'${part.replace(/'/g, "'\\''")}'`).join(' ');
   const cleanup = (job.onExit || []).map((cmd) => `${cmd} 2>/dev/null;`).join(' ');
-  if (!job.timeoutSeconds) {
+  const guard = windowGuardPrefix(job);
+  const touchSuccess = job.window ? `[ $RC -eq 0 ] && touch "${job.window.successFile}"; ` : '';
+  if (!job.timeoutSeconds && !guard) {
     return cleanup ? `${quoted}; ${cleanup} true` : quoted;
   }
+  if (!job.timeoutSeconds) {
+    return `${guard}${quoted}; RC=$?; ${touchSuccess}${cleanup} true`;
+  }
   return (
-    `${quoted} & P=$!; (sleep ${job.timeoutSeconds} && kill $P 2>/dev/null ` +
+    `${guard}${quoted} & P=$!; (sleep ${job.timeoutSeconds} && kill $P 2>/dev/null ` +
     `&& echo "[watchdog] ${job.id} killed after cap") & W=$!; ` +
-    `wait $P; kill $W 2>/dev/null; ${cleanup} true`
+    `wait $P; RC=$?; kill $W 2>/dev/null; ${touchSuccess}${cleanup} true`
   );
 }
 
@@ -42,7 +66,7 @@ function launchdLabel(jobId) {
 }
 
 function renderLaunchdPlist(job, logDir) {
-  const needsShell = Boolean(job.timeoutSeconds || (job.onExit && job.onExit.length));
+  const needsShell = Boolean(job.timeoutSeconds || job.window || (job.onExit && job.onExit.length));
   const programArguments = needsShell
     ? ['/bin/bash', '-c', watchdogShellLine(job)]
     : job.command;
@@ -87,7 +111,7 @@ function renderSystemdUnit(job) {
   const envLines = Object.entries(job.env || {})
     .map(([key, value]) => `Environment=${key}=${value}`)
     .join('\n');
-  const needsShell = Boolean(job.timeoutSeconds || (job.onExit && job.onExit.length));
+  const needsShell = Boolean(job.timeoutSeconds || job.window || (job.onExit && job.onExit.length));
   const execStart = needsShell
     ? `/bin/bash -c "${watchdogShellLine(job).replace(/"/g, '\\"')}"`
     : job.command.join(' ');
@@ -212,5 +236,6 @@ module.exports = {
   renderLaunchdPlist,
   renderSystemdUnit,
   renderTaskSchedulerGuidance,
-  watchdogShellLine
+  watchdogShellLine,
+  windowGuardPrefix
 };

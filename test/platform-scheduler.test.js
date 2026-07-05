@@ -25,6 +25,13 @@ const dreamJob = {
   env: {},
   schedule: { hour: 3, minute: 30 },
   timeoutSeconds: 7200,
+  window: {
+    startHour: 2,
+    endHour: 7,
+    catchUpBeforeHour: 9,
+    staleMinutes: 4320,
+    successFile: '/tmp/logs/dream-last-success'
+  },
   onExit: ['/tmp/bin/ollama stop qwen3:4b']
 };
 
@@ -79,6 +86,21 @@ test('watchdog shell line without timeout is plain command', () => {
   assert.ok(!line.includes('sleep'));
 });
 
+test('window guard skips outside hours, allows catch-up, records success', () => {
+  const line = watchdogShellLine(dreamJob);
+  assert.match(line, /-ge 2/);
+  assert.match(line, /-lt 7/);
+  assert.match(line, /-lt 9/);
+  assert.match(line, /-mmin -4320/);
+  assert.match(line, /exit 0/);
+  assert.match(line, /\[ \$RC -eq 0 \] && touch "\/tmp\/logs\/dream-last-success"/);
+});
+
+test('jobs without window have no guard', () => {
+  const { windowGuardPrefix } = require('../src/scheduler');
+  assert.strictEqual(windowGuardPrefix(intervalJob), '');
+});
+
 test('default config validates and follows platform RAM', () => {
   const config = defaultConfig({ totalRamGb: 64, os: 'macos', headless: false });
   assert.deepStrictEqual(validateConfig(config), []);
@@ -121,6 +143,8 @@ test('jobSpecs includes dream watchdog and distiller schedule', () => {
   const dream = jobs.find((job) => job.id === 'gbrain-dream');
   assert.ok(dream.timeoutSeconds >= 3600);
   assert.strictEqual(dream.onExit.length, 2);
+  assert.strictEqual(dream.window.startHour, 2);
+  assert.ok(dream.window.successFile.endsWith('dream-last-success'));
   const distiller = jobs.find((job) => job.id === 'transcript-distiller');
   assert.deepStrictEqual(distiller.schedule, { minute: 45 });
   const sync = jobs.find((job) => job.id === 'gbrain-sync');

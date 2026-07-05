@@ -49,12 +49,37 @@ over ~500 pages ran 13 hours and pinned ~13GB in RAM all day. Defaults in
 `src/platform.js#suggestModels`. Also disable `cycle.propose_takes` unless the
 takes feature is actually enabled — it burns LLM time with no consumer.
 
-## Dream watchdog
+## Dream watchdog + run window
 
-The dream job must be wrapped: hard kill after 2h and `ollama stop <model>` on
-exit (`src/gbrain.js#jobSpecs` + `src/scheduler.js#watchdogShellLine`).
+The dream job must be wrapped twice (`src/gbrain.js#jobSpecs` +
+`src/scheduler.js#watchdogShellLine`):
+
+1. **Hard kill after 2h** and `ollama stop <model>` on exit. First full
+   enrichment passes can otherwise run 13+ hours.
+2. **Run window (02:00–07:00)**: launchd and systemd both fire *missed*
+   calendar jobs when a laptop wakes — so a 3:30am dream runs at 4pm the
+   moment the lid opens, loading models mid-workday. The window guard exits
+   immediately outside the window; a catch-up rule (no success recorded in
+   72h AND before 09:00) keeps always-asleep-at-3:30 laptops dreaming
+   eventually.
+
+Cycle phases like `propose_takes` have **no enable gate**, and their USD
+budget caps never bind on local models (unpriced calls are always allowed) —
+so containment lives in the scheduler wrapper, not gbrain config.
+
 Ollama's own behavior is fine — idle daemon ~54MB, models load on demand and
 unload after 5 idle minutes — but only if nothing keeps requesting.
+
+## Ollama context cap (the 24GB 4B model)
+
+Without a server-side cap, one chat request can load a model at its **maximum
+context window** — qwen3:4b at 262,144 tokens ≈ 24GB of KV cache for a 3GB
+model. Fix: `OLLAMA_CONTEXT_LENGTH=32768` in the ollama server environment
+(`src/gbrain.js#ensureOllamaContextCap`). On macOS **do not patch the brew
+service plist** — `brew services restart` regenerates it and wipes custom env
+(observed live). SOS instead stops brew's service and installs its own
+`com.sos.ollama` launchd agent with the env baked in. Linux: systemd drop-in.
+`sos doctor` checks the cap is in place.
 
 ## Ollama pulls fail silently
 
