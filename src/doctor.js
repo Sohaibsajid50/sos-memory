@@ -61,6 +61,50 @@ function vaultWriteChecks(registry) {
   return checks;
 }
 
+/**
+ * Scheduled jobs can die silently (TCC EPERM before the first log line kept
+ * two jobs dead for 8 days with zero errors anywhere). Freshness = the job's
+ * own log advanced recently; anything else is a lie.
+ */
+function jobFreshnessChecks(config) {
+  const checks = [];
+  const gbrainLogs = path.join(require('os').homedir(), '.gbrain', 'logs');
+  const ageHours = (filePath) => {
+    try {
+      return (Date.now() - fs.statSync(filePath).mtimeMs) / 3600000;
+    } catch (_) {
+      return Infinity;
+    }
+  };
+
+  if (config && config.retrieval && config.retrieval.gbrain) {
+    const syncAge = ageHours(path.join(gbrainLogs, 'gbrain-sync.log'));
+    checks.push({
+      id: 'job_fresh_gbrain_sync',
+      ok: syncAge < 3,
+      detail: syncAge === Infinity ? 'no log — job never ran' : `last activity ${syncAge.toFixed(1)}h ago (hourly job; >3h = dead or blocked)`
+    });
+    const dreamAge = ageHours(path.join(gbrainLogs, 'dream-last-success'));
+    checks.push({
+      id: 'job_fresh_gbrain_dream',
+      ok: dreamAge < 96,
+      detail: dreamAge === Infinity ? 'never succeeded' : `last success ${(dreamAge / 24).toFixed(1)}d ago (>4d = investigate)`
+    });
+  }
+  if (config && config.distiller && config.distiller.enabled) {
+    const distillerAge = ageHours(path.join(
+      process.env.CLAUDE_CONFIG_DIR || path.join(require('os').homedir(), '.claude'),
+      'cache', 'transcript-distiller.log'
+    ));
+    checks.push({
+      id: 'job_fresh_transcript_distiller',
+      ok: distillerAge < 3,
+      detail: distillerAge === Infinity ? 'no log — job never ran' : `last activity ${distillerAge.toFixed(1)}h ago (hourly job; >3h = dead or blocked)`
+    });
+  }
+  return checks;
+}
+
 async function doctor() {
   const platformInfo = detectPlatform();
   const config = loadConfig();
@@ -77,6 +121,7 @@ async function doctor() {
   });
 
   vaultWriteChecks(registry).forEach(track);
+  jobFreshnessChecks(config).forEach(track);
 
   if (config && config.retrieval && config.retrieval.qmd) {
     const qmd = detectQmd();

@@ -17,6 +17,30 @@ const { findInCandidates } = require('./detect');
 const { writeFileWithBackup } = require('./fs-utils');
 
 const REPO_HOOKS_DIR = path.join(__dirname, '..', 'hooks');
+const CLAUDE_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
+// Scheduled jobs MUST run hook copies from ~/.claude, never from the repo:
+// the repo usually lives under ~/Documents, and launchd-spawned node gets
+// TCC EPERM opening scripts inside protected folders (observed live — jobs
+// died silently for 8 days). ~/.claude is outside TCC scope.
+const INSTALLED_HOOKS_DIR = path.join(CLAUDE_CONFIG_DIR, 'hooks');
+const SCHEDULED_HOOKS = ['_common.js', 'gbrain-sync.js', 'transcript-distiller.js'];
+
+function syncInstalledHooks(dryRun) {
+  if (dryRun) return { copied: [] };
+  fs.mkdirSync(INSTALLED_HOOKS_DIR, { recursive: true });
+  const copied = [];
+  for (const name of SCHEDULED_HOOKS) {
+    const source = path.join(REPO_HOOKS_DIR, name);
+    const target = path.join(INSTALLED_HOOKS_DIR, name);
+    const sourceContent = fs.readFileSync(source, 'utf8');
+    const targetContent = fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : null;
+    if (sourceContent !== targetContent) {
+      fs.writeFileSync(target, sourceContent);
+      copied.push(name);
+    }
+  }
+  return { copied };
+}
 
 function log(line) {
   process.stdout.write(`${line}\n`);
@@ -92,13 +116,16 @@ async function apply({ dryRun = false } = {}) {
       log('[apply] gbrain file-plane config + model split written');
     }
 
+    const hookSync = syncInstalledHooks(dryRun);
+    if (hookSync.copied.length) log(`[apply] hooks synced to ${INSTALLED_HOOKS_DIR}: ${hookSync.copied.join(', ')}`);
+
     // Prefer the stable PATH symlink over process.execPath: the latter is a
     // versioned Cellar path on Homebrew installs and breaks on node upgrades.
     const jobs = gbrainIntegration.jobSpecs({
       nodeBin: findInCandidates('node') || process.execPath,
       gbrainBin,
       ollamaBin: plan.detections.ollama.path,
-      hooksDir: REPO_HOOKS_DIR,
+      hooksDir: INSTALLED_HOOKS_DIR,
       cycleModel: config.gbrain.cycleModel,
       thinkModel: config.gbrain.thinkModel
     }).filter((job) => job.id !== 'transcript-distiller' || config.distiller.enabled);
