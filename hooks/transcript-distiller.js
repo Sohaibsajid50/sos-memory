@@ -41,6 +41,10 @@ const MIN_TRANSCRIPT_CHARS = 400;
 // Loop guard: headless distill sessions contain this marker and are skipped.
 const SENTINEL = 'SOS-TRANSCRIPT-DISTILLER';
 
+// Subscription/usage limits surface as CLI output (sometimes with exit 0).
+// They are retryable and must never be saved as digests or burn attempts.
+const RATE_LIMIT_PATTERN = /session limit|usage limit|rate limit|resets \d{1,2}[:.]?\d{0,2}\s*(am|pm)?/i;
+
 function log(message) {
   fs.mkdirSync(path.dirname(LOG_PATH), { recursive: true });
   fs.appendFileSync(LOG_PATH, `${new Date().toISOString()} ${message}\n`);
@@ -225,6 +229,10 @@ function main() {
         }
         const summary = distill(claudeBin, parsed.text);
         if (!summary) throw new Error('empty summary from distill call');
+        if (RATE_LIMIT_PATTERN.test(summary.slice(0, 300))) {
+          log(`rate-limited (“${summary.slice(0, 80)}”) — stopping this run; will retry next hour`);
+          break;
+        }
         const project = parsed.cwd ? resolveProject(registry, parsed.cwd) : null;
         const section = project ? project.daily_section : 'General';
         const delivery = deliverDigest(registry, new Date(mtime), section, parsed.agent, summary);
@@ -232,6 +240,11 @@ function main() {
         processed += 1;
         log(`distilled ${path.basename(filePath)} (${parsed.agent}) -> ${delivery.staged ? 'STAGED ' : ''}${delivery.target} [${section}]`);
       } catch (error) {
+        const output = `${error.stdout || ''}${error.stderr || ''}`;
+        if (RATE_LIMIT_PATTERN.test(output)) {
+          log('rate-limited (from error output) — stopping this run; will retry next hour');
+          break;
+        }
         state.files[filePath] = { seenMtime: record.seenMtime, attempts: record.attempts + 1 };
         const stderr = error.stderr ? ` | stderr: ${String(error.stderr).slice(0, 300)}` : '';
         log(`ERROR ${filePath}: ${error.message}${stderr}`);
