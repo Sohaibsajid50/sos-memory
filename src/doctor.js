@@ -91,6 +91,22 @@ function jobFreshnessChecks(config) {
       detail: dreamAge === Infinity ? 'never succeeded' : `last success ${(dreamAge / 24).toFixed(1)}d ago (>4d = investigate)`
     });
   }
+  const pendingDir = path.join(
+    process.env.CLAUDE_CONFIG_DIR || path.join(require('os').homedir(), '.claude'),
+    'cache', 'pending-digests'
+  );
+  let pendingCount = 0;
+  try {
+    pendingCount = fs.readdirSync(pendingDir).filter((name) => name.endsWith('.md')).length;
+  } catch (_) {}
+  checks.push({
+    id: 'pending_digests_backlog',
+    ok: pendingCount < 25,
+    detail: pendingCount === 0
+      ? 'none staged'
+      : `${pendingCount} staged digest(s) awaiting a session-hook flush${pendingCount >= 25 ? ' — session hooks may not be flushing' : ''}`
+  });
+
   if (config && config.distiller && config.distiller.enabled) {
     const distillerAge = ageHours(path.join(
       process.env.CLAUDE_CONFIG_DIR || path.join(require('os').homedir(), '.claude'),

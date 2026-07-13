@@ -6,7 +6,14 @@
 
 const fs = require('fs');
 const path = require('path');
-const { isInside, normalizePath, readRegistry, resolveProject, todayIso } = require('./_common');
+const {
+  flushPendingDigests,
+  isInside,
+  normalizePath,
+  readRegistry,
+  resolveProject,
+  todayIso
+} = require('./_common');
 
 function slugFor(folderName) {
   return folderName
@@ -76,6 +83,13 @@ if (!isInside(cwd, registry.documents_root)) process.exit(0);
 
 for (const folder of detectPendingProjects(registry)) {
   process.stdout.write(`[vault-daily] Detected unregistered project ${folder}; run: bootstrap project memory ${folder}\n`);
+}
+
+// Session hooks run with full user permissions — deliver anything the
+// scheduled jobs could not write into the vault themselves.
+const flushed = flushPendingDigests(registry.vault_root);
+if (flushed > 0) {
+  process.stdout.write(`[vault-daily] Flushed ${flushed} staged session digest(s) into the vault\n`);
 }
 
 const project = resolveProject(registry, cwd);

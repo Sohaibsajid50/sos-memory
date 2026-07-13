@@ -6,6 +6,10 @@ const { spawnSync } = require('child_process');
 const CLAUDE_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
 const REGISTRY_PATH = process.env.SOS_REGISTRY_PATH || path.join(CLAUDE_CONFIG_DIR, 'projects.json');
 const STATE_DIR = path.join(CLAUDE_CONFIG_DIR, 'cache');
+// Scheduled jobs can lose vault write access (macOS TCC grants break on node
+// upgrades). They stage writes here; session hooks flush them with full user
+// permissions. Filename contract: <date>__<section>__<title>.md
+const PENDING_DIGESTS_DIR = path.join(STATE_DIR, 'pending-digests');
 
 function readRegistry() {
   if (!fs.existsSync(REGISTRY_PATH)) return null;
@@ -90,10 +94,62 @@ function writeStateJson(stateFileName, state) {
   fs.writeFileSync(path.join(STATE_DIR, stateFileName), `${JSON.stringify(state, null, 2)}\n`);
 }
 
+/** Append a block under `## section` in the vault daily note for dateSlug. */
+function appendToDailySection(vaultRoot, dateSlug, section, block) {
+  const dailyDir = path.join(vaultRoot, 'Daily');
+  fs.mkdirSync(dailyDir, { recursive: true });
+  const notePath = path.join(dailyDir, `${dateSlug}.md`);
+  let body = fs.existsSync(notePath) ? fs.readFileSync(notePath, 'utf8') : `# ${dateSlug}\n`;
+  const header = `## ${section}`;
+  if (!body.includes(header)) body = `${body.trimEnd()}\n\n${header}\n`;
+  const sections = body.split(/^(?=## )/m);
+  const index = sections.findIndex((chunk) => chunk.startsWith(header));
+  sections[index] = `${sections[index].trimEnd()}\n${block}`;
+  fs.writeFileSync(notePath, sections.join('\n'));
+  return notePath;
+}
+
+/** Stage a daily-note block for later flush by a session hook. */
+function stagePendingDigest(dateSlug, section, block) {
+  fs.mkdirSync(PENDING_DIGESTS_DIR, { recursive: true });
+  const fileName = `${dateSlug}__${section.replace(/[^A-Za-z0-9-]+/g, '_')}__${Date.now()}.md`;
+  fs.writeFileSync(path.join(PENDING_DIGESTS_DIR, fileName), block);
+  return fileName;
+}
+
+/** Flush staged digests into the vault. Call from user-context session hooks. */
+function flushPendingDigests(vaultRoot) {
+  let entries = [];
+  try {
+    entries = fs.readdirSync(PENDING_DIGESTS_DIR).filter((name) => name.endsWith('.md'));
+  } catch (_) {
+    return 0;
+  }
+  let flushed = 0;
+  for (const name of entries.sort()) {
+    const [dateSlug, sectionSlug] = name.split('__');
+    if (!dateSlug || !sectionSlug) continue;
+    const filePath = path.join(PENDING_DIGESTS_DIR, name);
+    try {
+      const block = fs.readFileSync(filePath, 'utf8');
+      appendToDailySection(vaultRoot, dateSlug, sectionSlug.replace(/_/g, ' '), block);
+      fs.unlinkSync(filePath);
+      flushed += 1;
+    } catch (_) {
+      break; // vault still unwritable — leave the rest staged
+    }
+  }
+  return flushed;
+}
+
 module.exports = {
   CLAUDE_CONFIG_DIR,
+  PENDING_DIGESTS_DIR,
   REGISTRY_PATH,
   STATE_DIR,
+  appendToDailySection,
+  flushPendingDigests,
+  stagePendingDigest,
   appendLine,
   findBinary,
   isInside,

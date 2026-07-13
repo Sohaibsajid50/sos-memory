@@ -23,13 +23,16 @@ const CLAUDE_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(
 // TCC EPERM opening scripts inside protected folders (observed live — jobs
 // died silently for 8 days). ~/.claude is outside TCC scope.
 const INSTALLED_HOOKS_DIR = path.join(CLAUDE_CONFIG_DIR, 'hooks');
-const SCHEDULED_HOOKS = ['_common.js', 'gbrain-sync.js', 'transcript-distiller.js'];
 
 function syncInstalledHooks(dryRun) {
   if (dryRun) return { copied: [] };
   fs.mkdirSync(INSTALLED_HOOKS_DIR, { recursive: true });
   const copied = [];
-  for (const name of SCHEDULED_HOOKS) {
+  // Sync every repo hook: scheduled jobs AND session hooks must run the
+  // repo's current logic (session hooks flush staged digests, so they are
+  // part of the delivery pipeline, not just convenience).
+  const hookFiles = fs.readdirSync(REPO_HOOKS_DIR).filter((name) => name.endsWith('.js'));
+  for (const name of hookFiles) {
     const source = path.join(REPO_HOOKS_DIR, name);
     const target = path.join(INSTALLED_HOOKS_DIR, name);
     const sourceContent = fs.readFileSync(source, 'utf8');

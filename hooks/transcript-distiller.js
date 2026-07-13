@@ -16,10 +16,12 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const {
   CLAUDE_CONFIG_DIR,
+  appendToDailySection,
   findBinary,
   readRegistry,
   readStateJson,
   resolveProject,
+  stagePendingDigest,
   writeStateJson
 } = require('./_common');
 
@@ -156,21 +158,21 @@ function distill(claudeBin, transcriptText) {
   }).trim();
 }
 
-function appendToDailyNote(registry, sessionDate, section, agent, summary) {
-  const dailyDir = path.join(registry.vault_root, 'Daily');
-  fs.mkdirSync(dailyDir, { recursive: true });
+/**
+ * Write the digest into the vault; on permission failure (macOS TCC grants
+ * for launchd node break on node upgrades) stage it for the session hooks
+ * to flush with full user permissions.
+ */
+function deliverDigest(registry, sessionDate, section, agent, summary) {
   const dateSlug = sessionDate.toISOString().slice(0, 10);
-  const notePath = path.join(dailyDir, `${dateSlug}.md`);
-  let body = fs.existsSync(notePath) ? fs.readFileSync(notePath, 'utf8') : `# ${dateSlug}\n`;
-  const header = `## ${section}`;
-  if (!body.includes(header)) body = `${body.trimEnd()}\n\n${header}\n`;
   const time = sessionDate.toTimeString().slice(0, 5);
   const block = `\n### Session digest — ${agent} ${time}\n${summary}\n`;
-  const sections = body.split(/^(?=## )/m);
-  const index = sections.findIndex((chunk) => chunk.startsWith(header));
-  sections[index] = `${sections[index].trimEnd()}\n${block}`;
-  fs.writeFileSync(notePath, sections.join('\n'));
-  return notePath;
+  try {
+    return { target: appendToDailySection(registry.vault_root, dateSlug, section, block), staged: false };
+  } catch (error) {
+    if (error.code !== 'EPERM' && error.code !== 'EACCES') throw error;
+    return { target: stagePendingDigest(dateSlug, section, block), staged: true };
+  }
 }
 
 function main() {
@@ -225,12 +227,10 @@ function main() {
         if (!summary) throw new Error('empty summary from distill call');
         const project = parsed.cwd ? resolveProject(registry, parsed.cwd) : null;
         const section = project ? project.daily_section : 'General';
-        const notePath = appendToDailyNote(
-          registry, new Date(mtime), section, parsed.agent, summary
-        );
+        const delivery = deliverDigest(registry, new Date(mtime), section, parsed.agent, summary);
         state.files[filePath] = { seenMtime: mtime, attempts: 0 };
         processed += 1;
-        log(`distilled ${path.basename(filePath)} (${parsed.agent}) -> ${notePath} [${section}]`);
+        log(`distilled ${path.basename(filePath)} (${parsed.agent}) -> ${delivery.staged ? 'STAGED ' : ''}${delivery.target} [${section}]`);
       } catch (error) {
         state.files[filePath] = { seenMtime: record.seenMtime, attempts: record.attempts + 1 };
         const stderr = error.stderr ? ` | stderr: ${String(error.stderr).slice(0, 300)}` : '';
